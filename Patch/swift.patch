@@ -1,0 +1,66 @@
+diff --git a/stdlib/private/SwiftPrivateLibcExtras/SwiftPrivateLibcExtras.swift b/stdlib/private/SwiftPrivateLibcExtras/SwiftPrivateLibcExtras.swift
+index f8daa50325c..66be85a77f0 100644
+--- a/stdlib/private/SwiftPrivateLibcExtras/SwiftPrivateLibcExtras.swift
++++ b/stdlib/private/SwiftPrivateLibcExtras/SwiftPrivateLibcExtras.swift
+@@ -131,6 +131,8 @@ public func _stdlib_pipe() -> (readEnd: CInt, writeEnd: CInt, error: CInt) {
+     return _pipe(unsafeFds.baseAddress, 0, 0)
+ #elseif os(WASI)
+     preconditionFailure("No pipes available on WebAssembly/WASI")
++#elseif os(Android)
++    return pipe(unsafeFds.baseAddress!)
+ #else
+     return pipe(unsafeFds.baseAddress)
+ #endif
+diff --git a/stdlib/public/SwiftShims/swift/shims/LibcShims.h b/stdlib/public/SwiftShims/swift/shims/LibcShims.h
+index 1e4132f6279..a29ff045e93 100644
+--- a/stdlib/public/SwiftShims/swift/shims/LibcShims.h
++++ b/stdlib/public/SwiftShims/swift/shims/LibcShims.h
+@@ -61,7 +61,7 @@ SWIFT_READONLY
+ static inline int _swift_stdlib_memcmp(const void *s1, const void *s2,
+                                        __swift_size_t n) {
+ // FIXME: Is there a way to identify Glibc specifically?
+-#if defined(__gnu_linux__)
++#if defined(__gnu_linux__) || defined (__ANDROID__)
+   extern int memcmp(const void * _Nonnull, const void * _Nonnull, __swift_size_t);
+ #else
+   extern int memcmp(const void * _Null_unspecified, const void * _Null_unspecified, __swift_size_t);
+diff --git a/utils/build-presets.ini b/utils/build-presets.ini
+index a8683614afe..9365e984c42 100644
+--- a/utils/build-presets.ini
++++ b/utils/build-presets.ini
+@@ -980,10 +980,26 @@ build-ninja
+ 
+ android
+ android-ndk=%(ndk_path)s
+-android-api-level=21
++android-api-level=28
+ build-swift-static-stdlib
+ build-swift-static-sdk-overlay
+ build-swift-stdlib-unittest-extra
++build-toolchain-only=1
++
++swift-include-tests=0
++llvm-include-tests=0
++skip-test-swift
++skip-test-swiftpm
++skip-test-swift-driver
++skip-test-llbuild
++skip-test-lldb
++skip-test-cmark
++skip-test-playgroundsupport
++skip-test-swiftsyntax
++skip-test-swiftformat
++skip-test-skstresstester
++skip-test-swiftevolve
++skip-test-swiftdocc
+ 
+ # Path to the root of the installation filesystem.
+ install-destdir=%(install_destdir)s
+@@ -994,7 +1010,6 @@ installable-package=%(installable_package)s
+ host-test
+ 
+ install-prefix=/usr
+-install-llvm
+ install-swift
+ install-swiftsyntax
+ 

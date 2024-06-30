@@ -1,0 +1,216 @@
+diff --git a/Sources/Foundation/FileHandle.swift b/Sources/Foundation/FileHandle.swift
+index a538a297..90db70f5 100644
+--- a/Sources/Foundation/FileHandle.swift
++++ b/Sources/Foundation/FileHandle.swift
+@@ -310,9 +310,15 @@ open class FileHandle : NSObject {
+                 let data = mmap(nil, mapSize, PROT_READ, MAP_PRIVATE, _fd, 0)
+                 // Swift does not currently expose MAP_FAILURE
+                 if data != UnsafeMutableRawPointer(bitPattern: -1) {
++                    #if os(Android)
++                    return NSData.NSDataReadResult(bytes: data, length: mapSize) { buffer, length in
++                        munmap(buffer, length)
++                    }
++                    #else
+                     return NSData.NSDataReadResult(bytes: data!, length: mapSize) { buffer, length in
+                         munmap(buffer, length)
+                     }
++                    #endif
+                 }
+             }
+ 
+diff --git a/Sources/Foundation/FileManager+POSIX.swift b/Sources/Foundation/FileManager+POSIX.swift
+index d90ece91..ce76137d 100644
+--- a/Sources/Foundation/FileManager+POSIX.swift
++++ b/Sources/Foundation/FileManager+POSIX.swift
+@@ -741,20 +741,32 @@ extension FileManager {
+             if rmdir(fsRep) == 0 {
+                 return
+             } else if errno == ENOTEMPTY {
++                #if os(Android)
++                let ps = UnsafeMutablePointer<UnsafeMutablePointer<Int8>>.allocate(capacity: 2)
++                #else
+                 let ps = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: 2)
++                #endif
+                 ps.initialize(to: UnsafeMutablePointer(mutating: fsRep))
++                #if os(Android)
++                ps.advanced(by: 1).initialize(to: unsafeBitCast(0, to: UnsafeMutablePointer<Int8>.self))
++                #else
+                 ps.advanced(by: 1).initialize(to: nil)
++                #endif
+                 let stream = fts_open(ps, FTS_PHYSICAL | FTS_XDEV | FTS_NOCHDIR | FTS_NOSTAT, nil)
+                 ps.deinitialize(count: 2)
+                 ps.deallocate()
+ 
+-                if stream != nil {
++                if let stream {
+                     defer {
+                         fts_close(stream)
+                     }
+ 
+                     while let current = fts_read(stream)?.pointee {
++                        #if os(Android)
++                        let itemPath = string(withFileSystemRepresentation: current.fts_path!, length: Int(current.fts_pathlen))
++                        #else
+                         let itemPath = string(withFileSystemRepresentation: current.fts_path, length: Int(current.fts_pathlen))
++                        #endif
+                         guard alreadyConfirmed || shouldRemoveItemAtPath(itemPath, isURL: isURL) else {
+                             continue
+                         }
+@@ -762,13 +774,25 @@ extension FileManager {
+                         do {
+                             switch Int32(current.fts_info) {
+                             case FTS_DEFAULT, FTS_F, FTS_NSOK, FTS_SL, FTS_SLNONE:
++                                #if os(Android)
++                                if unlink(current.fts_path!) == -1 {
++                                    throw _NSErrorWithErrno(errno, reading: false, path: itemPath)
++                                }
++                                #else
+                                 if unlink(current.fts_path) == -1 {
+                                     throw _NSErrorWithErrno(errno, reading: false, path: itemPath)
+                                 }
++                                #endif
+                             case FTS_DP:
++                                #if os(Android)
++                                if rmdir(current.fts_path!) == -1 {
++                                    throw _NSErrorWithErrno(errno, reading: false, path: itemPath)
++                                }
++                                #else
+                                 if rmdir(current.fts_path) == -1 {
+                                     throw _NSErrorWithErrno(errno, reading: false, path: itemPath)
+                                 }
++                                #endif
+                             case FTS_DNR, FTS_ERR, FTS_NS:
+                                 throw _NSErrorWithErrno(current.fts_errno, reading: false, path: itemPath)
+                             default:
+@@ -1085,10 +1109,18 @@ extension FileManager {
+             do {
+                 guard fm.fileExists(atPath: _url.path) else { throw _NSErrorWithErrno(ENOENT, reading: true, url: url) }
+                 _stream = try FileManager.default._fileSystemRepresentation(withPath: _url.path) { fsRep in
++                    #if os(Android)
++                    let ps = UnsafeMutablePointer<UnsafeMutablePointer<Int8>>.allocate(capacity: 2)
++                    #else
+                     let ps = UnsafeMutablePointer<UnsafeMutablePointer<Int8>?>.allocate(capacity: 2)
++                    #endif
+                     defer { ps.deallocate() }
+                     ps.initialize(to: UnsafeMutablePointer(mutating: fsRep))
++                    #if os(Android)
++                    ps.advanced(by: 1).initialize(to: unsafeBitCast(0, to: UnsafeMutablePointer<Int8>.self))
++                    #else
+                     ps.advanced(by: 1).initialize(to: nil)
++                    #endif
+                     return fts_open(ps, FTS_PHYSICAL | FTS_XDEV | FTS_NOCHDIR | FTS_NOSTAT, nil)
+                 }
+                 if _stream == nil {
+@@ -1136,13 +1168,20 @@ extension FileManager {
+ 
+                 _current = fts_read(stream)
+                 while let current = _current {
++                    #if os(Android)
++                    let filename = FileManager.default.string(withFileSystemRepresentation: current.pointee.fts_path!, length: Int(current.pointee.fts_pathlen))
++                    #else
+                     let filename = FileManager.default.string(withFileSystemRepresentation: current.pointee.fts_path, length: Int(current.pointee.fts_pathlen))
+-
++                    #endif
+                     switch Int32(current.pointee.fts_info) {
+                         case FTS_D:
+                             let (showFile, skipDescendants) = match(filename: filename, to: _options, isDir: true)
+                             if skipDescendants {
++                                #if os(Android)
++                                fts_set(_stream!, _current!, FTS_SKIP)
++                                #else
+                                 fts_set(_stream, _current, FTS_SKIP)
++                                #endif
+                             }
+                             if showFile {
+                                  return URL(fileURLWithPath: filename, isDirectory: true)
+@@ -1315,11 +1354,19 @@ extension FileManager {
+             let finalErrno = originalItemURL.withUnsafeFileSystemRepresentation { (originalFS) -> Int32? in
+                 return newItemURL.withUnsafeFileSystemRepresentation { (newItemFS) -> Int32? in
+                     // This is an atomic operation in many OSes, but is not guaranteed to be atomic by the standard.
++                    #if os(Android)
++                    if rename(newItemFS!, originalFS!) == 0 {
++                        return nil
++                    } else {
++                        return errno
++                    }
++                    #else
+                     if rename(newItemFS, originalFS) == 0 {
+                         return nil
+                     } else {
+                         return errno
+                     }
++                    #endif
+                 }
+             }
+             if let theErrno = finalErrno {
+diff --git a/Sources/Foundation/FileManager.swift b/Sources/Foundation/FileManager.swift
+index 1aa3038a..08c8a714 100644
+--- a/Sources/Foundation/FileManager.swift
++++ b/Sources/Foundation/FileManager.swift
+@@ -569,12 +569,20 @@ open class FileManager : NSObject {
+         let type = FileAttributeType(attributes: attributes, atPath: path)
+ #else
+         if let pwd = getpwuid(s.st_uid), pwd.pointee.pw_name != nil {
++            #if os(Android)
++            let name = String(cString: pwd.pointee.pw_name!)
++            #else
+             let name = String(cString: pwd.pointee.pw_name)
++            #endif
+             result[.ownerAccountName] = name
+         }
+ 
+         if let grd = getgrgid(s.st_gid), grd.pointee.gr_name != nil {
++            #if os(Android)
++            let name = String(cString: grd.pointee.gr_name!)
++            #else
+             let name = String(cString: grd.pointee.gr_name)
++            #endif
+             result[.groupOwnerAccountName] = name
+         }
+ 
+diff --git a/Sources/Foundation/Host.swift b/Sources/Foundation/Host.swift
+index 5fe7b29c..9baaf0ab 100644
+--- a/Sources/Foundation/Host.swift
++++ b/Sources/Foundation/Host.swift
+@@ -25,7 +25,11 @@ import WinSDK
+ 
+     // getnameinfo uses size_t for its 4th and 6th arguments.
+     private func getnameinfo(_ addr: UnsafePointer<sockaddr>?, _ addrlen: socklen_t, _ host: UnsafeMutablePointer<Int8>?, _ hostlen: socklen_t, _ serv: UnsafeMutablePointer<Int8>?, _ servlen: socklen_t, _ flags: Int32) -> Int32 {
++        #if os(Android)
++        return Glibc.getnameinfo(addr!, addrlen, host, Int(hostlen), serv, Int(servlen), flags)
++        #else
+         return Glibc.getnameinfo(addr, addrlen, host, Int(hostlen), serv, Int(servlen), flags)
++        #endif
+     }
+ 
+     // getifaddrs and freeifaddrs are not available in Android 6.0 or earlier, so call these functions dynamically.
+diff --git a/Sources/Foundation/Process.swift b/Sources/Foundation/Process.swift
+index 542cc94c..deedcb14 100644
+--- a/Sources/Foundation/Process.swift
++++ b/Sources/Foundation/Process.swift
+@@ -928,8 +928,13 @@ open class Process: NSObject {
+ #else
+         var spawnAttrs: posix_spawnattr_t = posix_spawnattr_t()
+ #endif
++        #if os(Android)
++        try _throwIfPosixError(posix_spawnattr_init(&spawnAttrs!))
++        try _throwIfPosixError(posix_spawnattr_setflags(&spawnAttrs!, .init(POSIX_SPAWN_SETPGROUP)))
++        #else
+         try _throwIfPosixError(posix_spawnattr_init(&spawnAttrs))
+         try _throwIfPosixError(posix_spawnattr_setflags(&spawnAttrs, .init(POSIX_SPAWN_SETPGROUP)))
++        #endif
+ #if canImport(Darwin)
+         try _throwIfPosixError(posix_spawnattr_setflags(&spawnAttrs, .init(POSIX_SPAWN_CLOEXEC_DEFAULT)))
+ #else
+@@ -960,7 +965,11 @@ open class Process: NSObject {
+         guard _CFPosixSpawn(&pid, launchPath, fileActions, &spawnAttrs, argv, envp) == 0 else {
+             throw _NSErrorWithErrno(errno, reading: true, path: launchPath)
+         }
++        #if os(Android)
++        posix_spawnattr_destroy(&spawnAttrs!)
++        #else
+         posix_spawnattr_destroy(&spawnAttrs)
++        #endif
+ 
+         // Close the write end of the input and output pipes.
+         if let pipe = standardInput as? Pipe {
