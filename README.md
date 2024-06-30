@@ -18,7 +18,7 @@ tar xf swift-5.10.1-runtime-aarch64-unknown-linux-android28.tar.gz -C /Library/D
 1. Generate destination json file:
 ```bash
 cd Destinations
-./generate.sh
+./generate_darwin.sh
 # Enter runtime sdk install path: Library/Developer/Runtimes/swift-5.10.1-runtime-aarch64-unknown-linux-android28
 # Enter the Swift compiler (swiftc) path: /path/to/offical/swift-5.10.1/swiftc
 # Enter Enter the NDK(26d) installation path:
