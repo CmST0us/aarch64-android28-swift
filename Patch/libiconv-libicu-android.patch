@@ -1,0 +1,26 @@
+diff --git a/setEnvironment-armeabi-v7a.sh b/setEnvironment-armeabi-v7a.sh
+index 1f89e08..ea70cd2 100755
+--- a/setEnvironment-armeabi-v7a.sh
++++ b/setEnvironment-armeabi-v7a.sh
+@@ -26,7 +26,7 @@ fi
+ ARCH=armeabi-v7a
+ GCCPREFIX=armv7a-linux-androideabi
+ BINUTILSPREFIX=arm-linux-androideabi
+-APILEVEL=19
++APILEVEL=21
+ 
+ 
+ CFLAGS="
+diff --git a/setEnvironment-x86.sh b/setEnvironment-x86.sh
+index a56f8cb..d9ae519 100755
+--- a/setEnvironment-x86.sh
++++ b/setEnvironment-x86.sh
+@@ -25,7 +25,7 @@ else
+ fi
+ ARCH=x86
+ GCCPREFIX=i686-linux-android
+-APILEVEL=19
++APILEVEL=21
+ 
+ 
+ CFLAGS="
