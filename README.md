@@ -165,6 +165,7 @@ cd $WORKSPACE_SWIFT_AARCH64_ANDROID/swift-project/swift
 export NDK_PATH=$WORKSPACE_SWIFT_AARCH64_ANDROID/android-ndk-r26d
 export SWIFT_PATH=$WORKSPACE_SWIFT_AARCH64_ANDROID/swift-5.10.1-RELEASE-ubuntu22.04/usr/bin
 export INSTALL_PATH=$WORKSPACE_SWIFT_AARCH64_ANDROID/install
+export PATH=$PATH:$SWIFT_PATH
 
 utils/build-script --preset buildbot_linux_crosscompile_android,tools=RA,stdlib=RD,build,aarch64 \
 	ndk_path=$NDK_PATH \
